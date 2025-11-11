@@ -4,36 +4,38 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
-const db = require('./config/database');
-const authRoutes = require('./routes/auth');
-const companyRoutes = require('./routes/companies');
-const podRoutes = require('./routes/pods');
-const vendorRoutes = require('./routes/vendors');
-const invoiceRoutes = require('./routes/invoices');
-const paymentRoutes = require('./routes/payments');
-const dashboardRoutes = require('./routes/dashboard');
-const alertRoutes = require('./routes/alerts');
+// Import backend modules from finops-platform
+const dbPath = path.join(__dirname, '../finops-platform/backend');
+const backendPath = path.join(__dirname, '../finops-platform/backend');
+
+// Make sure the backend modules are accessible
+process.chdir(backendPath);
+
+const db = require('../finops-platform/backend/config/database');
+const authRoutes = require('../finops-platform/backend/routes/auth');
+const companyRoutes = require('../finops-platform/backend/routes/companies');
+const podRoutes = require('../finops-platform/backend/routes/pods');
+const vendorRoutes = require('../finops-platform/backend/routes/vendors');
+const invoiceRoutes = require('../finops-platform/backend/routes/invoices');
+const paymentRoutes = require('../finops-platform/backend/routes/payments');
+const dashboardRoutes = require('../finops-platform/backend/routes/dashboard');
+const alertRoutes = require('../finops-platform/backend/routes/alerts');
+
+// Copy database to /tmp for Vercel serverless if it doesn't exist
+if (!fs.existsSync('/tmp/database.sqlite') && fs.existsSync(path.join(__dirname, '../finops-platform/backend/database.sqlite'))) {
+  fs.copyFileSync(
+    path.join(__dirname, '../finops-platform/backend/database.sqlite'),
+    '/tmp/database.sqlite'
+  );
+}
 
 const app = express();
 
-// Export for Vercel serverless functions
-module.exports = (req, res) => {
-  app(req, res);
-};
-
-// Keep local development server
-const PORT = process.env.PORT || 5000;
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`🚀 FinOps Backend Server running on port ${PORT}`);
-    console.log(`📊 Dashboard: http://localhost:${PORT}/health`);
-  });
-}
-
 // Trust proxy settings for rate limiting
-app.set('trust proxy', 1); // Trust first proxy
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
@@ -64,7 +66,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Static file serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, '../finops-platform/backend/uploads')));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -95,5 +97,7 @@ app.use('*', (req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
-// Note: module.exports is already defined above for Vercel compatibility
-// The server start is handled in the conditional block above
+// Export for Vercel serverless functions
+module.exports = (req, res) => {
+  app(req, res);
+};

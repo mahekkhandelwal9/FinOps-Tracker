@@ -9,18 +9,26 @@
       }
     },
     {
-      "src": "api/login.js",
+      "src": "api/index.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/login",
-      "dest": "/api/login.js"
+      "src": "/api/(.*)",
+      "dest": "api/index.js"
     },
     {
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/index.js": {
+      "includeFiles": ["finops-platform/backend/**", "api/**"]
+    }
+  }
 }
