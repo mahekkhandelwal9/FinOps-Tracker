@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/static-build"
+      "use": "@vercel/static-build",
+      "config": {
+        "srcCmd": "node build-simple.js"
+      }
     },
     {
       "src": "api/auth.js",
@@ -14,6 +17,10 @@
     {
       "src": "/api/(.*)",
       "dest": "/api/auth.js"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/static/$1"
     },
     {
       "src": "/(.*)",
