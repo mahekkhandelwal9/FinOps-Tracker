@@ -1,0 +1,16 @@
+# Node and dependencies
+node_modules/
+.env
+.env.local
+.env.development
+.env.production
+.DS_Store
+dist/
+build/
+.vscode/
+.idea/
+*.log
+*.sqlite
+*.sqlite-journal
+settings.local.json
+
