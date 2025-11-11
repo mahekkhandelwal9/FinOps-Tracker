@@ -1,0 +1,26 @@
+services:
+  # Backend API Service
+  - type: web
+    name: finops-backend-api
+    env: node
+    plan: free
+    buildCommand: "cd backend && npm install"
+    startCommand: "cd backend && npm start"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+    healthCheckPath: /health
+
+  # Frontend Service (if you want to deploy on Render too)
+  # - type: web
+  #   name: finops-frontend
+  #   env: static
+  #   plan: free
+  #   buildCommand: "cd frontend && npm install && npm run build"
+  #   staticPublishPath: frontend/build
+  #   routes:
+  #     - type: rewrite
+  #       source: /api/*
+  #       destination: https://finops-backend-api.onrender.com/api/*

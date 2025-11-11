@@ -17,7 +17,20 @@ const dashboardRoutes = require('./routes/dashboard');
 const alertRoutes = require('./routes/alerts');
 
 const app = express();
+
+// Export for Vercel serverless functions
+module.exports = (req, res) => {
+  app(req, res);
+};
+
+// Keep local development server
 const PORT = process.env.PORT || 5000;
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 FinOps Backend Server running on port ${PORT}`);
+    console.log(`📊 Dashboard: http://localhost:${PORT}/health`);
+  });
+}
 
 // Trust proxy settings for rate limiting
 app.set('trust proxy', 1); // Trust first proxy
@@ -25,7 +38,10 @@ app.set('trust proxy', 1); // Trust first proxy
 // Security middleware
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
   credentials: true
 }));
 
