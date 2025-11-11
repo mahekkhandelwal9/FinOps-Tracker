@@ -3,32 +3,21 @@
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
+      "use": "@vercel/static-build"
     },
     {
-      "src": "api/index.js",
+      "src": "api/auth.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/index.js"
+      "dest": "/api/auth.js"
     },
     {
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "functions": {
-    "api/index.js": {
-      "includeFiles": ["finops-platform/backend/**", "api/**"]
-    }
-  }
+  ]
 }
