@@ -1,27 +1,50 @@
 {
-  "name": "finops-platform",
+  "name": "finops-frontend",
   "version": "1.0.0",
-  "description": "FinOps Platform - A comprehensive cloud cost management tool",
-  "main": "index.js",
+  "private": true,
+  "dependencies": {
+    "@headlessui/react": "^1.7.15",
+    "@heroicons/react": "^2.2.0",
+    "@tailwindcss/forms": "^0.5.10",
+    "axios": "^1.4.0",
+    "clsx": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.14.2",
+    "react-scripts": "5.0.1",
+    "recharts": "^2.7.2",
+    "tailwindcss": "^3.3.3"
+  },
   "scripts": {
-    "start": "cd backend && npm start",
-    "install:all": "cd backend && npm install && cd ../frontend && npm install",
-    "dev": "concurrently \"cd backend && npm start\" \"cd frontend && npm start\"",
-    "build": "cd frontend && npm run build",
-    "vercel-build": "cd frontend && npm install && npm run build && cd .. && node copy-build.js",
-    "test": "echo \"No tests specified\" && exit 1"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "vercel-build": "npm install && npm run build"
   },
-  "keywords": [
-    "finops",
-    "cloud-cost",
-    "budget-management"
-  ],
-  "author": "",
-  "license": "ISC",
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "proxy": "http://localhost:5000"
 }
