@@ -7,7 +7,6 @@ import {
   UserGroupIcon,
   ArchiveBoxIcon,
   DocumentTextIcon,
-  BanknotesIcon,
   BellIcon,
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
@@ -31,7 +30,6 @@ const Layout = () => {
     { name: 'Pods', href: '/pods', icon: UserGroupIcon },
     { name: 'Vendors', href: '/vendors', icon: ArchiveBoxIcon },
     { name: 'Invoices', href: '/invoices', icon: DocumentTextIcon },
-    { name: 'Payments', href: '/payments', icon: BanknotesIcon },
     { name: 'Alerts', href: '/alerts', icon: BellIcon },
   ];
 

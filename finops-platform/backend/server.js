@@ -12,7 +12,6 @@ const companyRoutes = require('./routes/companies');
 const podRoutes = require('./routes/pods');
 const vendorRoutes = require('./routes/vendors');
 const invoiceRoutes = require('./routes/invoices');
-const paymentRoutes = require('./routes/payments');
 const dashboardRoutes = require('./routes/dashboard');
 const alertRoutes = require('./routes/alerts');
 
@@ -77,7 +76,6 @@ app.use('/api/companies', companyRoutes);
 app.use('/api/pods', podRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/invoices', invoiceRoutes);
-app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/alerts', alertRoutes);
 

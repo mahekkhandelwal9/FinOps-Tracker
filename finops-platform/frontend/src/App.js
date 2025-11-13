@@ -6,11 +6,9 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Companies from './pages/Companies/Companies';
-import CompanyDetail from './pages/Companies/CompanyDetail';
 import Pods from './pages/Pods/Pods';
 import Vendors from './pages/Vendors/Vendors';
 import Invoices from './pages/Invoices/Invoices';
-import Payments from './pages/Payments/Payments';
 import Alerts from './pages/Alerts/Alerts';
 import Profile from './pages/Profile/Profile';
 import LoadingSpinner from './components/UI/LoadingSpinner';
@@ -77,11 +75,9 @@ const AppContent = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="companies" element={<Companies />} />
-          <Route path="companies/:id" element={<CompanyDetail />} />
           <Route path="pods" element={<Pods />} />
           <Route path="vendors" element={<Vendors />} />
           <Route path="invoices" element={<Invoices />} />
-          <Route path="payments" element={<Payments />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="profile" element={<Profile />} />
         </Route>

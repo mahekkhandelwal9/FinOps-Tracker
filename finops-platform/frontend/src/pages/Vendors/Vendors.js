@@ -4,6 +4,7 @@ import api from '../../services/api';
 
 const Vendors = () => {
   const [vendors, setVendors] = useState([]);
+  const [pods, setPods] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
@@ -16,11 +17,13 @@ const Vendors = () => {
     poc_phone: '',
     payment_terms: 'NET 30',
     default_due_days: 30,
-    notes: ''
+    notes: '',
+    pod_allocations: []
   });
 
   useEffect(() => {
     fetchVendors();
+    fetchPods();
   }, []);
 
   const fetchVendors = async () => {
@@ -32,6 +35,16 @@ const Vendors = () => {
       setVendors([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPods = async () => {
+    try {
+      const response = await api.get('/pods');
+      setPods(response.data.pods || []);
+    } catch (error) {
+      console.error('Error fetching pods:', error);
+      setPods([]);
     }
   };
 
@@ -60,7 +73,8 @@ const Vendors = () => {
       poc_phone: vendor.poc_phone || '',
       payment_terms: vendor.payment_terms || 'NET 30',
       default_due_days: vendor.default_due_days || 30,
-      notes: vendor.notes || ''
+      notes: vendor.notes || '',
+      pod_allocations: []
     });
     setShowModal(true);
   };
@@ -87,8 +101,29 @@ const Vendors = () => {
       poc_phone: '',
       payment_terms: 'NET 30',
       default_due_days: 30,
-      notes: ''
+      notes: '',
+      pod_allocations: []
     });
+  };
+
+  const handlePodAllocationChange = (podId, checked) => {
+    setFormData(prev => ({
+      ...prev,
+      pod_allocations: checked
+        ? [...prev.pod_allocations, { pod_id: podId, allocation_percentage: 100 }]
+        : prev.pod_allocations.filter(allocation => allocation.pod_id !== podId)
+    }));
+  };
+
+  const handleAllocationPercentageChange = (podId, percentage) => {
+    setFormData(prev => ({
+      ...prev,
+      pod_allocations: prev.pod_allocations.map(allocation =>
+        allocation.pod_id === podId
+          ? { ...allocation, allocation_percentage: parseInt(percentage) || 0 }
+          : allocation
+      )
+    }));
   };
 
   const getVendorTypeColor = (type) => {
@@ -192,6 +227,13 @@ const Vendors = () => {
                   <p className="text-sm font-medium text-gray-900">{vendor.default_due_days || 'N/A'}</p>
                 </div>
               </div>
+
+              {vendor.pod_names && (
+                <div>
+                  <p className="text-sm text-gray-500">Associated Pods</p>
+                  <p className="text-sm text-gray-700 line-clamp-2">{vendor.pod_names}</p>
+                </div>
+              )}
 
               {vendor.notes && (
                 <div>
@@ -319,6 +361,54 @@ const Vendors = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
+                {/* Pod Allocations */}
+                {formData.shared_status === 'Shared' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Pod Allocations
+                    </label>
+                    <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                      {pods.map((pod) => {
+                        const allocation = formData.pod_allocations.find(a => a.pod_id === pod.pod_id);
+                        const isChecked = !!allocation;
+
+                        return (
+                          <div key={pod.pod_id} className="flex items-center space-x-3">
+                            <input
+                              type="checkbox"
+                              id={`pod-${pod.pod_id}`}
+                              checked={isChecked}
+                              onChange={(e) => handlePodAllocationChange(pod.pod_id, e.target.checked)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor={`pod-${pod.pod_id}`} className="flex-1 text-sm text-gray-700">
+                              {pod.pod_name}
+                            </label>
+                            {isChecked && (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs text-gray-500">%</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="100"
+                                  value={allocation?.allocation_percentage || 100}
+                                  onChange={(e) => handleAllocationPercentageChange(pod.pod_id, e.target.value)}
+                                  className="w-16 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {formData.pod_allocations.length > 0 && (
+                      <div className="mt-2 text-xs text-gray-500">
+                        Total allocation: {formData.pod_allocations.reduce((sum, a) => sum + a.allocation_percentage, 0)}%
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button

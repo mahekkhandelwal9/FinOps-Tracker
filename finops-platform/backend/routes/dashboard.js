@@ -10,27 +10,36 @@ router.get('/company/:company_id', authenticateToken, async (req, res) => {
     const { company_id } = req.params;
     const { period = 'current_month' } = req.query;
 
-    // Calculate date range based on period
+    // Calculate date range and multiplier based on period
     let dateCondition = '';
+    let periodMultiplier = 1; // Default to 1 for current_month
+
     const now = new Date();
+    const currentYear = now.getFullYear();
 
     if (period === 'current_month') {
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfMonth = new Date(currentYear, now.getMonth(), 1);
       dateCondition = `AND i.invoice_date >= '${startOfMonth.toISOString().split('T')[0]}'`;
+      periodMultiplier = 1;
     } else if (period === 'last_month') {
-      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+      const startOfLastMonth = new Date(currentYear, now.getMonth() - 1, 1);
+      const endOfLastMonth = new Date(currentYear, now.getMonth(), 0);
       dateCondition = `AND i.invoice_date >= '${startOfLastMonth.toISOString().split('T')[0]}' AND i.invoice_date <= '${endOfLastMonth.toISOString().split('T')[0]}'`;
+      periodMultiplier = 1;
     } else if (period === 'quarter') {
-      const startOfQuarter = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-      dateCondition = `AND i.invoice_date >= '${startOfQuarter.toISOString().split('T')[0]}'`;
+      // Get last 3 months (current + 2 previous)
+      const quarterStart = new Date(currentYear, now.getMonth() - 2, 1);
+      dateCondition = `AND i.invoice_date >= '${quarterStart.toISOString().split('T')[0]}'`;
+      periodMultiplier = 3;
     } else if (period === 'year') {
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      dateCondition = `AND i.invoice_date >= '${startOfYear.toISOString().split('T')[0]}'`;
+      // Get last 12 months
+      const yearStart = new Date(currentYear, now.getMonth() - 11, 1);
+      dateCondition = `AND i.invoice_date >= '${yearStart.toISOString().split('T')[0]}'`;
+      periodMultiplier = 12;
     }
 
-    // Get company overview
-    const overview = await db.query(`
+    // Get company details and static pod budgets (without time filtering)
+    const companyData = await db.query(`
       SELECT
         c.company_id,
         c.company_name,
@@ -39,51 +48,101 @@ router.get('/company/:company_id', authenticateToken, async (req, res) => {
         c.financial_period,
         COUNT(DISTINCT p.pod_id) as total_pods,
         COUNT(DISTINCT vpa.vendor_id) as total_vendors,
-        COALESCE(SUM(p.budget_ceiling), 0) as total_allocated_budget,
-        COALESCE(SUM(p.budget_used), 0) as total_used_budget,
-        COALESCE(SUM(p.budget_ceiling - p.budget_used), 0) as total_remaining_budget,
-        ROUND((COALESCE(SUM(p.budget_used), 0) / COALESCE(SUM(p.budget_ceiling), 1)) * 100, 2) as overall_utilization,
+        COALESCE(SUM(p.budget_ceiling), 0) as total_monthly_budget
+      FROM companies c
+      LEFT JOIN pods p ON c.company_id = p.company_id AND p.status = 'Active'
+      LEFT JOIN vendor_pod_allocations vpa ON p.pod_id = vpa.pod_id
+      WHERE c.company_id = ? AND c.status = 'Active'
+    `, [company_id]);
+
+    if (companyData.length === 0) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    // Get time-filtered invoice and payment data
+    const invoiceData = await db.query(`
+      SELECT
         COUNT(DISTINCT i.invoice_id) as total_invoices,
         COALESCE(SUM(i.amount), 0) as total_invoice_amount,
         COUNT(CASE WHEN i.status = 'Pending' THEN 1 END) as pending_invoices,
         COUNT(CASE WHEN i.status = 'Overdue' THEN 1 END) as overdue_invoices,
         COUNT(CASE WHEN i.status = 'Pending' AND julianday(i.due_date) - julianday('now') <= 7 THEN 1 END) as due_soon_invoices,
+        COUNT(CASE WHEN i.status = 'Paid' THEN 1 END) as paid_invoices,
         COALESCE(SUM(CASE WHEN i.status = 'Paid' THEN i.amount ELSE 0 END), 0) as paid_amount,
         COALESCE(SUM(CASE WHEN i.status = 'Pending' THEN i.amount ELSE 0 END), 0) as pending_amount,
         COALESCE(SUM(CASE WHEN i.status = 'Overdue' THEN i.amount ELSE 0 END), 0) as overdue_amount
       FROM companies c
       LEFT JOIN pods p ON c.company_id = p.company_id AND p.status = 'Active'
-      LEFT JOIN vendor_pod_allocations vpa ON p.pod_id = vpa.pod_id
-      LEFT JOIN vendors v ON vpa.vendor_id = v.vendor_id
       LEFT JOIN invoices i ON p.pod_id = i.pod_id
-      WHERE c.company_id = ? AND c.status = 'Active'
-      ${dateCondition}
+      WHERE c.company_id = ? AND c.status = 'Active' ${dateCondition}
     `, [company_id]);
 
-    if (overview.length === 0) {
-      return res.status(404).json({ error: 'Company not found' });
-    }
+    // Combine the results
+    const company = companyData[0];
+    const allData = invoiceData[0] || {};
 
-    // Pod budget split
-    const podBudgetSplit = await db.query(`
+    const overview = {
+      ...company,
+      // Calculate period-specific budget
+      total_budget: company.total_monthly_budget * periodMultiplier,
+      total_invoices: allData.total_invoices || 0,
+      total_invoice_amount: allData.total_invoice_amount || 0,
+      pending_invoices: allData.pending_invoices || 0,
+      overdue_invoices: allData.overdue_invoices || 0,
+      due_soon_invoices: allData.due_soon_invoices || 0,
+      paid_invoices: allData.paid_invoices || 0,
+      paid_amount: allData.paid_amount || 0,
+      pending_amount: allData.pending_amount || 0,
+      overdue_amount: allData.overdue_amount || 0,
+      // Add period info for frontend
+      period_multiplier: periodMultiplier,
+      period_type: period
+    };
+
+    // Pod budget split - get static pod data and time-based spend separately
+    const staticPodData = await db.query(`
       SELECT
         p.pod_id,
         p.pod_name,
         p.budget_ceiling,
-        p.budget_used,
-        p.budget_remaining,
-        p.budget_status,
-        ROUND((p.budget_used / p.budget_ceiling) * 100, 2) as utilization_percentage,
-        u.name as owner_name,
-        COUNT(DISTINCT i.invoice_id) as invoice_count,
-        COALESCE(SUM(i.amount), 0) as total_spend
+        u.name as owner_name
       FROM pods p
       LEFT JOIN users u ON p.owner_user_id = u.user_id
-      LEFT JOIN invoices i ON p.pod_id = i.pod_id
       WHERE p.company_id = ? AND p.status = 'Active'
-      GROUP BY p.pod_id
-      ORDER BY p.budget_used DESC
+      ORDER BY p.budget_ceiling DESC
     `, [company_id]);
+
+    // Get time-filtered invoice data for each pod
+    const podInvoiceData = await db.query(`
+      SELECT
+        i.pod_id,
+        COUNT(DISTINCT i.invoice_id) as invoice_count,
+        COALESCE(SUM(i.amount), 0) as total_spend
+      FROM invoices i
+      LEFT JOIN pods p ON i.pod_id = p.pod_id
+      WHERE p.company_id = ? ${dateCondition}
+      GROUP BY i.pod_id
+    `, [company_id]);
+
+    // Combine static pod data with time-filtered invoice data and apply period multiplier
+    const podBudgetSplit = staticPodData.map(pod => {
+      const invoiceData = podInvoiceData.find(data => data.pod_id === pod.pod_id) || {};
+      const budgetUsed = invoiceData.total_spend || 0;
+      const periodBudgetCeiling = pod.budget_ceiling * periodMultiplier;
+
+      return {
+        ...pod,
+        budget_used: budgetUsed,
+        budget_ceiling: periodBudgetCeiling, // Update to period-specific budget
+        budget_remaining: Math.max(0, periodBudgetCeiling - budgetUsed),
+        budget_status: budgetUsed > periodBudgetCeiling ? 'Over Budget' : 'Within Limit',
+        utilization_percentage: periodBudgetCeiling > 0 ? Math.round((budgetUsed / periodBudgetCeiling) * 100 * 100) / 100 : 0,
+        invoice_count: invoiceData.invoice_count || 0,
+        total_spend: budgetUsed,
+        // Keep original monthly budget for reference
+        monthly_budget_ceiling: pod.budget_ceiling
+      };
+    }).sort((a, b) => b.total_spend - a.total_spend);
 
     // Budget utilization chart
     const budgetUtilization = await db.query(`
@@ -173,7 +232,7 @@ router.get('/company/:company_id', authenticateToken, async (req, res) => {
       ) AND a.status = 'Active'
     `, [company_id]);
 
-    // Recent invoices
+    // Recent invoices (time-filtered)
     const recentInvoices = await db.query(`
       SELECT
         i.invoice_id,
@@ -187,8 +246,8 @@ router.get('/company/:company_id', authenticateToken, async (req, res) => {
       FROM invoices i
       LEFT JOIN vendors v ON i.vendor_id = v.vendor_id
       LEFT JOIN pods p ON i.pod_id = p.pod_id
-      WHERE p.company_id = ?
-      ORDER BY i.created_at DESC
+      WHERE p.company_id = ? ${dateCondition}
+      ORDER BY i.invoice_date DESC
       LIMIT 10
     `, [company_id]);
 

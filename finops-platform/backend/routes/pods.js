@@ -130,7 +130,10 @@ router.post('/', authenticateToken, async (req, res) => {
       budget_categories = []
     } = req.body;
 
-    if (!pod_name || !company_id || !owner_user_id || !budget_ceiling) {
+    // Use authenticated user as owner if not provided
+    const final_owner_user_id = owner_user_id || req.user.user_id;
+
+    if (!pod_name || !company_id || !final_owner_user_id || !budget_ceiling) {
       return res.status(400).json({
         error: 'Pod name, company, owner, and budget ceiling are required'
       });
@@ -153,7 +156,7 @@ router.post('/', authenticateToken, async (req, res) => {
       INSERT INTO pods (pod_id, pod_name, description, company_id, owner_user_id,
                         budget_ceiling, threshold_alert)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [podId, pod_name, description, company_id, owner_user_id, budget_ceiling, threshold_alert]);
+    `, [podId, pod_name, description, company_id, final_owner_user_id, budget_ceiling, threshold_alert]);
 
     // Create budget categories if provided
     if (budget_categories.length > 0) {

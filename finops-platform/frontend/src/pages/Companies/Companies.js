@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PlusIcon, PencilIcon, TrashIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
 const Companies = () => {
-  const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -115,8 +113,7 @@ const Companies = () => {
         {companies.map((company) => (
           <div
             key={company.company_id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-200 hover:scale-[1.02]"
-            onClick={() => navigate(`/companies/${company.company_id}`)}
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
@@ -189,34 +186,18 @@ const Companies = () => {
                   </div>
                   <div className="flex items-center space-x-1">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(company);
-                      }}
+                      onClick={() => handleEdit(company)}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="Edit company"
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(company.company_id);
-                      }}
+                      onClick={() => handleDelete(company.company_id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete company"
                     >
                       <TrashIcon className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/companies/${company.company_id}`);
-                      }}
-                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                      title="View company details"
-                    >
-                      <ChartBarIcon className="h-4 w-4" />
                     </button>
                   </div>
                 </div>

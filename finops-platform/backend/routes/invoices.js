@@ -185,20 +185,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
     const invoice = invoices[0];
 
-    // Get payment details if paid
-    if (invoice.status === 'Paid') {
-      const payments = await db.query(`
-        SELECT
-          p.*,
-          u.name as recorded_by_name
-        FROM payments p
-        LEFT JOIN users u ON p.recorded_by = u.user_id
-        WHERE p.invoice_id = ?
-      `, [id]);
-
-      invoice.payment = payments[0] || null;
-    }
-
     res.json({ invoice });
 
   } catch (error) {
@@ -420,12 +406,6 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 
     const invoice = invoices[0];
-
-    // Don't allow deletion if payment exists
-    const payments = await db.query('SELECT payment_id FROM payments WHERE invoice_id = ?', [id]);
-    if (payments.length > 0) {
-      return res.status(400).json({ error: 'Cannot delete invoice with associated payment' });
-    }
 
     // Update pod budget if invoice was marked as paid
     if (invoice.status === 'Paid') {
