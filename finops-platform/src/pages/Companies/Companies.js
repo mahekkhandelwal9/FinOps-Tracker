@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PlusIcon, PencilIcon, TrashIcon, ChartBarIcon } from '@heroicons/react/24/outline';
+import { Link } from 'react-router-dom';
+import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
 const Companies = () => {
-  const navigate = useNavigate();
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -113,10 +112,10 @@ const Companies = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         {companies.map((company) => (
-          <div
+          <Link
             key={company.company_id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer hover:border-blue-200 hover:scale-[1.02]"
-            onClick={() => navigate(`/companies/${company.company_id}`)}
+            to={`/companies/${company.company_id}`}
+            className="block bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
@@ -190,6 +189,7 @@ const Companies = () => {
                   <div className="flex items-center space-x-1">
                     <button
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         handleEdit(company);
                       }}
@@ -200,6 +200,7 @@ const Companies = () => {
                     </button>
                     <button
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         handleDelete(company.company_id);
                       }}
@@ -208,21 +209,11 @@ const Companies = () => {
                     >
                       <TrashIcon className="h-4 w-4" />
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/companies/${company.company_id}`);
-                      }}
-                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                      title="View company details"
-                    >
-                      <ChartBarIcon className="h-4 w-4" />
-                    </button>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

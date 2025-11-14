@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PlusIcon, EyeIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
@@ -138,21 +139,33 @@ const Pods = () => {
           const company = companies.find(c => c.company_id === pod.company_id);
 
           return (
-            <div key={pod.pod_id} className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+            <Link
+              key={pod.pod_id}
+              to={`/pods/${pod.pod_id}`}
+              className="block bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+            >
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{pod.pod_name}</h3>
                   <p className="text-sm text-gray-500">{company?.company_name || 'Unknown Company'}</p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
                   <button
-                    onClick={() => handleEdit(pod)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleEdit(pod);
+                    }}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   >
                     <PencilIcon className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(pod.pod_id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDelete(pod.pod_id);
+                    }}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   >
                     <TrashIcon className="h-4 w-4" />
@@ -217,7 +230,7 @@ const Pods = () => {
                   </span>
                 </div>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>
