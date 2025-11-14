@@ -1,9 +1,57 @@
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { authenticateToken } = require('./auth');
 const db = require('../config/database');
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = 'uploads/documents';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    // Accept common document and image files
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain',
+      'image/jpeg',
+      'image/png',
+      'image/gif'
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, Word, Excel, PowerPoint, text files and images are allowed.'), false);
+    }
+  }
+});
 
 // Get all vendors (with optional filters)
 router.get('/', authenticateToken, async (req, res) => {
@@ -466,6 +514,225 @@ router.get('/:id/comparison', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Vendor comparison error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DOCUMENT MANAGEMENT ENDPOINTS
+
+// Get vendor documents
+router.get('/:id/documents', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if vendor exists
+    const vendors = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = ?', [id]);
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    const documents = await db.query(`
+      SELECT * FROM vendor_documents
+      WHERE vendor_id = ?
+      ORDER BY created_at DESC
+    `, [id]);
+
+    res.json({ documents });
+
+  } catch (error) {
+    console.error('Get vendor documents error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create vendor document
+router.post('/:id/documents', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      document_name,
+      document_type = 'Agreement',
+      file_path,
+      description,
+      tags = []
+    } = req.body;
+
+    if (!document_name) {
+      return res.status(400).json({ error: 'Document name is required' });
+    }
+
+    // Check if vendor exists
+    const vendors = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = ?', [id]);
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    const documentId = uuidv4();
+
+    await db.runQuery(`
+      INSERT INTO vendor_documents (
+        document_id, vendor_id, document_name, document_type,
+        file_path, description, tags
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      documentId, id, document_name, document_type,
+      file_path, description, JSON.stringify(tags)
+    ]);
+
+    res.status(201).json({
+      message: 'Document created successfully',
+      document_id: documentId
+    });
+
+  } catch (error) {
+    console.error('Create vendor document error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update vendor document
+router.put('/:id/documents/:documentId', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+    const {
+      document_name,
+      document_type,
+      file_path,
+      description,
+      tags
+    } = req.body;
+
+    // Check if vendor exists
+    const vendors = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = ?', [id]);
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    // Check if document exists
+    const documents = await db.query(
+      'SELECT document_id FROM vendor_documents WHERE document_id = ? AND vendor_id = ?',
+      [documentId, id]
+    );
+    if (documents.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    await db.runQuery(`
+      UPDATE vendor_documents
+      SET document_name = COALESCE(?, document_name),
+          document_type = COALESCE(?, document_type),
+          file_path = COALESCE(?, file_path),
+          description = COALESCE(?, description),
+          tags = COALESCE(?, tags),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE document_id = ?
+    `, [
+      document_name, document_type, file_path, description,
+      tags ? JSON.stringify(tags) : null, documentId
+    ]);
+
+    res.json({ message: 'Document updated successfully' });
+
+  } catch (error) {
+    console.error('Update vendor document error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete vendor document
+router.delete('/:id/documents/:documentId', authenticateToken, async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+
+    // Check if vendor exists
+    const vendors = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = ?', [id]);
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    // Delete document
+    const result = await db.runQuery(
+      'DELETE FROM vendor_documents WHERE document_id = ? AND vendor_id = ?',
+      [documentId, id]
+    );
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json({ message: 'Document deleted successfully' });
+
+  } catch (error) {
+    console.error('Delete vendor document error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Upload file for vendor document
+router.post('/:id/documents/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      document_name,
+      document_type = 'Agreement',
+      description,
+      tags = []
+    } = req.body;
+
+    if (!document_name) {
+      return res.status(400).json({ error: 'Document name is required' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'File is required' });
+    }
+
+    // Check if vendor exists
+    const vendors = await db.query('SELECT vendor_id FROM vendors WHERE vendor_id = ?', [id]);
+    if (vendors.length === 0) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    const documentId = uuidv4();
+    const fileUrl = `/uploads/documents/${req.file.filename}`;
+
+    await db.runQuery(`
+      INSERT INTO vendor_documents (
+        document_id, vendor_id, document_name, document_type,
+        file_path, description, tags, file_size, mime_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      documentId, id, document_name, document_type,
+      fileUrl, description, JSON.stringify(tags),
+      req.file.size, req.file.mimetype
+    ]);
+
+    res.status(201).json({
+      message: 'Document uploaded successfully',
+      document_id: documentId,
+      file_url: fileUrl
+    });
+
+  } catch (error) {
+    console.error('Upload vendor document error:', error);
+
+    // If there was a file uploaded but database operation failed, delete the file
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Serve uploaded files (static route)
+router.get('/uploads/documents/:filename', authenticateToken, (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, '../uploads/documents', filename);
+
+  if (fs.existsSync(filePath)) {
+    res.sendFile(path.resolve(filePath));
+  } else {
+    res.status(404).json({ error: 'File not found' });
   }
 });
 

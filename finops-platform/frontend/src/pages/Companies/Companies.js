@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
@@ -111,9 +112,10 @@ const Companies = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
         {companies.map((company) => (
-          <div
+          <Link
             key={company.company_id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200"
+            to={`/companies/${company.company_id}`}
+            className="block bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200 cursor-pointer"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
@@ -186,14 +188,22 @@ const Companies = () => {
                   </div>
                   <div className="flex items-center space-x-1">
                     <button
-                      onClick={() => handleEdit(company)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleEdit(company);
+                      }}
                       className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                       title="Edit company"
                     >
                       <PencilIcon className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(company.company_id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDelete(company.company_id);
+                      }}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete company"
                     >
@@ -203,7 +213,7 @@ const Companies = () => {
                 </div>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

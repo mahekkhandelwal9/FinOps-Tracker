@@ -6,8 +6,11 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Companies from './pages/Companies/Companies';
+import CompanyDetail from './pages/Companies/CompanyDetail';
 import Pods from './pages/Pods/Pods';
 import Vendors from './pages/Vendors/Vendors';
+import VendorDetail from './pages/Vendors/VendorDetail';
+import PodDetail from './pages/Pods/PodDetail';
 import Invoices from './pages/Invoices/Invoices';
 import Alerts from './pages/Alerts/Alerts';
 import Profile from './pages/Profile/Profile';
@@ -75,8 +78,11 @@ const AppContent = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="companies" element={<Companies />} />
+          <Route path="companies/:companyId" element={<CompanyDetail />} />
           <Route path="pods" element={<Pods />} />
+          <Route path="pods/:podId" element={<PodDetail />} />
           <Route path="vendors" element={<Vendors />} />
+          <Route path="vendors/:vendorId" element={<VendorDetail />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="profile" element={<Profile />} />

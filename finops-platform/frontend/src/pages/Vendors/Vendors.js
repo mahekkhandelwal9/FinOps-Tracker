@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PlusIcon, EyeIcon, PencilIcon, TrashIcon, EnvelopeIcon, PhoneIcon } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
@@ -166,7 +167,8 @@ const Vendors = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {vendors.map((vendor) => (
-          <div key={vendor.vendor_id} className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+          <Link key={vendor.vendor_id} to={`/vendors/${vendor.vendor_id}`} className="block group">
+            <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer">
             <div className="flex justify-between items-start mb-4">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">{vendor.vendor_name}</h3>
@@ -181,13 +183,13 @@ const Vendors = () => {
               </div>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => handleEdit(vendor)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleEdit(vendor); }}
                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                 >
                   <PencilIcon className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(vendor.vendor_id)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(vendor.vendor_id); }}
                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 >
                   <TrashIcon className="h-4 w-4" />
@@ -254,6 +256,7 @@ const Vendors = () => {
               </div>
             </div>
           </div>
+          </Link>
         ))}
       </div>
 

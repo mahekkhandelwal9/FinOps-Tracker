@@ -1,117 +1,185 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  CurrencyDollarIcon,
-  BuildingOfficeIcon,
-  UserGroupIcon,
-  DocumentTextIcon,
-  PlusIcon,
-  TrashIcon,
+  ArrowLeftIcon,
   PencilIcon,
-  ChartPieIcon,
-  ArrowTrendingUpIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ChatBubbleLeftRightIcon
+  TrashIcon,
+  PlusIcon,
+  DocumentTextIcon,
+  CurrencyDollarIcon,
+  ChartBarIcon,
+  UserGroupIcon,
+  BuildingOfficeIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  TagIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { companyAPI } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
-import Breadcrumb from '../../components/UI/Breadcrumb';
+import api from '../../services/api';
+import LoadingSpinner from '../../components/UI/LoadingSpinner';
 
 const CompanyDetail = () => {
-  const { id } = useParams();
+  const { companyId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
-
   const [company, setCompany] = useState(null);
-  const [dashboard, setDashboard] = useState(null);
+  const [pods, setPods] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('about');
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
-  const [noteText, setNoteText] = useState('');
   const [editingNote, setEditingNote] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [showDeletedNotes, setShowDeletedNotes] = useState(false);
-  const [isNotesCollapsed, setIsNotesCollapsed] = useState(() => {
-    const savedState = localStorage.getItem('company-notes-collapsed');
-    return savedState !== null ? JSON.parse(savedState) : true;
-  });
-  const [editFormData, setEditFormData] = useState({
+
+  // Form states
+  const [editForm, setEditForm] = useState({
     company_name: '',
-    description: '',
     total_budget: '',
-    financial_period: '',
-    notes: '',
-    status: 'Active'
+    currency: 'INR',
+    financial_period: 'Yearly',
+    description: '',
+    notes: ''
+  });
+
+  const [noteForm, setNoteForm] = useState({
+    note_title: '',
+    note_content: '',
+    note_type: 'General'
   });
 
   useEffect(() => {
-    fetchCompanyDetails();
-    fetchDashboard();
-    fetchNotes();
-  }, [id]);
-
-  useEffect(() => {
-    localStorage.setItem('company-notes-collapsed', JSON.stringify(isNotesCollapsed));
-  }, [isNotesCollapsed]);
+    if (companyId) {
+      fetchCompanyDetails();
+      fetchCompanyNotes();
+    }
+  }, [companyId]);
 
   const fetchCompanyDetails = async () => {
     try {
-      const response = await companyAPI.getById(id);
-      setCompany(response.data.company);
-      setEditFormData({
-        company_name: response.data.company.company_name,
-        description: response.data.company.description || '',
-        total_budget: response.data.company.total_budget,
-        financial_period: response.data.company.financial_period,
-        notes: response.data.company.notes || '',
-        status: response.data.company.status || 'Active'
-      });
+      const response = await api.get(`/companies/${companyId}`);
+      const companyData = response.data.company;
+      setCompany(companyData);
+      // Set pods and vendors from the company detail response
+      setPods(companyData.pods || []);
+      // Generate analytics from the available data
+      generateAnalytics(companyData);
     } catch (error) {
       console.error('Error fetching company details:', error);
-    }
-  };
-
-  const fetchDashboard = async () => {
-    try {
-      // Remove date filtering to get all-time data
-      const response = await companyAPI.getDashboard(id, 'all_time');
-      setDashboard(response.data);
-    } catch (error) {
-      console.error('Error fetching dashboard:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchNotes = async () => {
+  const generateAnalytics = (companyData) => {
+    const pods = companyData.pods || [];
+    const stats = companyData.stats || {};
+
+    const analyticsData = {
+      totalPods: pods.length,
+      activePods: pods.filter(pod => pod.status === 'Active').length,
+      totalBudgetAllocated: stats.total_budget_allocated || 0,
+      totalBudgetUsed: stats.total_budget_used || 0,
+      budgetUtilization: stats.total_budget_allocated > 0
+        ? ((stats.total_budget_used / stats.total_budget_allocated) * 100).toFixed(1)
+        : 0,
+      totalVendors: stats.total_vendors || 0,
+      totalInvoices: stats.total_invoices || 0,
+      avgPodBudget: pods.length > 0
+        ? Math.round(pods.reduce((sum, pod) => sum + (pod.budget_ceiling || 0), 0) / pods.length)
+        : 0,
+      topPerformingPods: pods
+        .filter(pod => pod.budget_ceiling > 0)
+        .sort((a, b) => (b.budget_used / b.budget_ceiling) - (a.budget_used / a.budget_ceiling))
+        .slice(0, 3),
+      budgetStatusDistribution: {
+        onTrack: pods.filter(pod => {
+          const utilization = pod.budget_ceiling > 0 ? (pod.budget_used / pod.budget_ceiling) * 100 : 0;
+          return utilization < 80;
+        }).length,
+        warning: pods.filter(pod => {
+          const utilization = pod.budget_ceiling > 0 ? (pod.budget_used / pod.budget_ceiling) * 100 : 0;
+          return utilization >= 80 && utilization < 95;
+        }).length,
+        critical: pods.filter(pod => {
+          const utilization = pod.budget_ceiling > 0 ? (pod.budget_used / pod.budget_ceiling) * 100 : 0;
+          return utilization >= 95;
+        }).length
+      }
+    };
+
+    setAnalytics(analyticsData);
+  };
+
+  const fetchCompanyNotes = async () => {
     try {
-      const response = await companyAPI.getNotes(id);
-      console.log('Notes fetched:', response.data.notes);
+      const response = await api.get(`/companies/${companyId}/notes`);
       setNotes(response.data.notes || []);
     } catch (error) {
-      console.error('Error fetching notes:', error);
+      console.error('Error fetching company notes:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddNote = async (e) => {
-    e.preventDefault();
-    if (!noteText.trim()) return;
+  const handleEditCompany = () => {
+    setEditForm({
+      company_name: company.company_name,
+      total_budget: company.total_budget || '',
+      currency: company.currency || 'INR',
+      financial_period: company.financial_period || 'Yearly',
+      description: company.description || '',
+      notes: company.notes || ''
+    });
+    setShowEditModal(true);
+  };
 
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/companies/${companyId}`, editForm);
+      fetchCompanyDetails();
+      setShowEditModal(false);
+    } catch (error) {
+      console.error('Error updating company:', error);
+      alert('Error updating company. Please try again.');
+    }
+  };
+
+  const handleEditModalClose = () => {
+    setShowEditModal(false);
+    setEditForm({
+      company_name: '',
+      total_budget: '',
+      currency: 'INR',
+      financial_period: 'Yearly',
+      description: '',
+      notes: ''
+    });
+  };
+
+  const handleDeleteCompany = async () => {
+    if (window.confirm('Are you sure you want to delete this company? This action cannot be undone.')) {
+      try {
+        await api.delete(`/companies/${companyId}`);
+        navigate('/companies');
+      } catch (error) {
+        console.error('Error deleting company:', error);
+        alert('Error deleting company. Please try again.');
+      }
+    }
+  };
+
+  const handleNoteSubmit = async (e) => {
+    e.preventDefault();
     try {
       if (editingNote) {
-        await companyAPI.updateNote(id, editingNote.note_id, { note_text: noteText });
+        await api.put(`/companies/${companyId}/notes/${editingNote.note_id}`, noteForm);
       } else {
-        await companyAPI.addNote(id, { note_text: noteText });
+        await api.post(`/companies/${companyId}/notes`, noteForm);
       }
-
-      setNoteText('');
-      setEditingNote(null);
-      setShowNoteModal(false);
-      fetchNotes();
+      fetchCompanyNotes();
+      handleNoteModalClose();
     } catch (error) {
       console.error('Error saving note:', error);
     }
@@ -119,243 +187,554 @@ const CompanyDetail = () => {
 
   const handleEditNote = (note) => {
     setEditingNote(note);
-    setNoteText(note.note_text);
+    setNoteForm({
+      note_title: note.note_title,
+      note_content: note.note_content,
+      note_type: note.note_type
+    });
     setShowNoteModal(true);
   };
 
   const handleDeleteNote = async (noteId) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
       try {
-        await companyAPI.deleteNote(id, noteId);
-        // Don't auto-toggle - let user decide when to view deleted notes
-        await fetchNotes();
+        await api.delete(`/companies/${companyId}/notes/${noteId}`);
+        fetchCompanyNotes();
       } catch (error) {
         console.error('Error deleting note:', error);
       }
     }
   };
 
-  const handleEditCompany = async (e) => {
-    e.preventDefault();
-    try {
-      await companyAPI.update(id, editFormData);
-      setIsEditing(false);
-      fetchCompanyDetails();
-    } catch (error) {
-      console.error('Error updating company:', error);
-    }
-  };
-
-  const formatCurrency = (amount) => {
-    return `₹${amount ? amount.toLocaleString('en-IN') : '0'}`;
-  };
-
-  // Prepare monthly trend data for chart
-  const prepareMonthlyTrendData = (monthlyTrend) => {
-    if (!monthlyTrend || monthlyTrend.length === 0) return [];
-
-    // Sort by date (ascending)
-    const sortedData = [...monthlyTrend].sort((a, b) => {
-      const dateA = new Date(a.year, a.month - 1);
-      const dateB = new Date(b.year, b.month - 1);
-      return dateA - dateB;
+  const handleNoteModalClose = () => {
+    setShowNoteModal(false);
+    setEditingNote(null);
+    setNoteForm({
+      note_title: '',
+      note_content: '',
+      note_type: 'General'
     });
-
-    // Format month names
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    return sortedData.map(item => ({
-      month: `${monthNames[parseInt(item.month) - 1]} ${item.year}`,
-      totalAmount: parseFloat(item.total_amount) || 0,
-      paidAmount: parseFloat(item.paid_amount) || 0,
-      invoiceCount: parseInt(item.invoice_count) || 0
-    }));
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-
-    const date = new Date(dateString);
-
-    // Check if the date string has timezone info (ends with Z or has timezone offset)
-    const hasTimezone = dateString.endsWith('Z') || dateString.includes('+') || dateString.includes('-') && (dateString.includes('T') && dateString.split('T')[1].includes('-') || dateString.includes('+'));
-
-    if (!hasTimezone) {
-      // If no timezone info, treat it as local time (database format)
-      return date.toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } else {
-      // If timezone info present, convert to IST
-      return date.toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Kolkata'
-      });
-    }
+  const getBudgetUtilization = (pod) => {
+    if (!pod.budget_ceiling) return 0;
+    const percentage = ((pod.budget_used || 0) / pod.budget_ceiling) * 100;
+    return Math.min(percentage, 100);
   };
 
-  // Use real-time data from backend API with fallbacks
-  const getRealTimeSummary = () => {
-    if (!dashboard?.summary) return {};
-
-    // Get backend data
-    const backendData = dashboard.summary;
-
-    // Debug log to check what data we're getting
-    console.log('Dashboard Summary Data:', backendData);
-    console.log('Company Budget:', company?.total_budget);
-    console.log('Allocated Budget:', backendData.allocated_budget);
-
-    // Calculate fallbacks if backend data is missing
-    const totalInvoices = backendData.total_invoices || 0;
-    const paidInvoices = backendData.paid_invoices || 0;
-    const pendingInvoices = backendData.pending_invoices || 0;
-    const usedBudget = backendData.total_invoice_amount || backendData.used_budget || 0;
-    const totalBudget = company?.total_budget || 0;
-
-    // Calculate percentages if not provided
-    const paidPercentage = totalInvoices > 0 ? (paidInvoices / totalInvoices) * 100 : 0;
-    const budgetUtilization = totalBudget > 0 ? (usedBudget / totalBudget) * 100 : 0;
-
-    const summary = {
-      ...backendData,
-      // Use backend-calculated values with fallbacks
-      total_pods: backendData.total_pods || 0,
-      total_invoices: totalInvoices,
-      total_vendors: backendData.total_vendors || 0,
-      // Total spend comes from actual invoices (not pod budget_used)
-      used_budget: usedBudget,
-      // Budget utilization percentage from backend or calculate
-      budget_utilization_percentage: backendData.invoice_utilization_percentage || budgetUtilization,
-      // Additional real-time metrics
-      allocated_budget: backendData.allocated_budget || 0,
-      paid_amount: backendData.paid_amount || 0,
-      pending_amount: backendData.pending_amount || 0,
-      paid_invoices: paidInvoices,
-      pending_invoices: pendingInvoices,
-      active_pods: backendData.active_pods || 0
-    };
-
-    // Debug logging (remove in production)
-    console.log('🔍 Dashboard Summary Debug:', {
-      total_invoices: summary.total_invoices,
-      paid_invoices: summary.paid_invoices,
-      pending_invoices: summary.pending_invoices,
-      budget_utilization_percentage: summary.budget_utilization_percentage,
-      used_budget: summary.used_budget,
-      paidPercentage: paidPercentage
-    });
-
-    return summary;
+  const getBudgetStatusColor = (pod) => {
+    const utilization = getBudgetUtilization(pod);
+    if (utilization >= 90) return 'text-red-600 bg-red-50';
+    if (utilization >= 75) return 'text-yellow-600 bg-yellow-50';
+    return 'text-green-600 bg-green-50';
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
-
-  if (!company) {
-    return (
-      <div className="p-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900">Company not found</h2>
-          <button
-            onClick={() => navigate('/companies')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Back to Companies
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const realTimeSummary = getRealTimeSummary();
 
   return (
-    <div className={`min-h-screen bg-gray-50`}>
-      <div className={`p-6 max-w-7xl transition-all duration-300 ${
-        isNotesCollapsed ? 'pr-20' : 'pr-96'
-      }`}>
-        {/* Header with Breadcrumb */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex-1">
-            {/* Breadcrumb Navigation */}
-            <div className="mb-4">
-              <Breadcrumb companyName={company?.company_name} />
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => navigate('/companies')}
+              className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{company?.company_name}</h1>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  company?.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-700'
+                }`}>
+                  {company?.status || 'Active'}
+                </span>
+                {company?.industry && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700">
+                    {company.industry}
+                  </span>
+                )}
+              </div>
             </div>
-
-            <div className="flex items-center space-x-3">
-              <h1 className="text-3xl font-bold text-gray-900">{company.company_name}</h1>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                company.status === 'Active'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {company.status}
-              </span>
-            </div>
-            <p className="text-gray-600 mt-1">Company Overview & Analytics</p>
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={() => setIsEditing(true)}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={handleEditCompany}
+              className="flex items-center px-3 py-2 text-blue-600 border border-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
             >
               <PencilIcon className="h-4 w-4 mr-2" />
-              Edit Company
+              Edit
+            </button>
+            <button
+              onClick={handleDeleteCompany}
+              className="flex items-center px-3 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <TrashIcon className="h-4 w-4 mr-2" />
+              Delete
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Edit Mode */}
-        {isEditing && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4">Edit Company Details</h2>
-            <form onSubmit={handleEditCompany}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Tabs */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          {[
+            { id: 'about', name: 'About', icon: BuildingOfficeIcon },
+            { id: 'pods', name: 'Pods', icon: UserGroupIcon },
+            { id: 'analytics', name: 'Analytics', icon: ChartBarIcon },
+            { id: 'notes', name: 'Notes', icon: DocumentTextIcon }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Icon className="h-5 w-5 mr-2" />
+                {tab.name}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {/* About Tab */}
+      {activeTab === 'about' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Company Name</label>
+                    <p className="text-gray-900">{company?.company_name}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Industry</label>
+                    <p className="text-gray-900">{company?.industry || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Contact Email</label>
+                    <p className="text-gray-900">{company?.contact_email || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Contact Phone</label>
+                    <p className="text-gray-900">{company?.contact_phone || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Website</label>
+                    <p className="text-gray-900">
+                      {company?.website ? (
+                        <a href={company.website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                          {company.website}
+                        </a>
+                      ) : 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Address</label>
+                    <p className="text-gray-900">{company?.address || 'Not specified'}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">City</label>
+                      <p className="text-gray-900">{company?.city || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">State</label>
+                      <p className="text-gray-900">{company?.state || 'Not specified'}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Country</label>
+                      <p className="text-gray-900">{company?.country || 'Not specified'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Pincode</label>
+                      <p className="text-gray-900">{company?.pincode || 'Not specified'}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Description</label>
+                    <p className="text-gray-900">{company?.description || 'No description available'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <UserGroupIcon className="h-8 w-8 text-blue-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Pods</p>
+                  <p className="text-2xl font-semibold text-gray-900">{pods.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <BuildingOfficeIcon className="h-8 w-8 text-green-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Vendors</p>
+                  <p className="text-2xl font-semibold text-gray-900">{vendors.length}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <DocumentTextIcon className="h-8 w-8 text-purple-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Notes</p>
+                  <p className="text-2xl font-semibold text-gray-900">{notes.length}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pods Tab */}
+      {activeTab === 'pods' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">Company Pods</h3>
+            <Link
+              to="/pods"
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Add Pod
+            </Link>
+          </div>
+
+          {pods.length === 0 ? (
+            <div className="text-center py-12">
+              <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No pods yet</h3>
+              <p className="text-gray-500 mb-4">Create your first pod to get started</p>
+              <Link
+                to="/pods"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Add Pod
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {pods.map((pod) => {
+                const utilization = getBudgetUtilization(pod);
+                const statusColor = getBudgetStatusColor(pod);
+
+                return (
+                  <Link
+                    key={pod.pod_id}
+                    to={`/pods/${pod.pod_id}`}
+                    className="block bg-white rounded-lg shadow-md border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">{pod.pod_name}</h3>
+                        <p className="text-sm text-gray-500">{company?.company_name}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <p className="text-sm text-gray-500">Budget Utilization</p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${statusColor}`}>
+                            {utilization.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              utilization >= 90 ? 'bg-red-600' :
+                              utilization >= 75 ? 'bg-yellow-600' : 'bg-green-600'
+                            }`}
+                            style={{ width: `${utilization}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm text-gray-500">Budget</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            ₹{pod.budget_ceiling ? pod.budget_ceiling.toLocaleString('en-IN') : '0'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Used</p>
+                          <p className="text-sm font-bold text-gray-900">
+                            ₹{(pod.budget_used || 0).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          pod.status === 'Active' ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-700'
+                        }`}>
+                          {pod.status || 'Active'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          Created: {new Date(pod.created_at).toLocaleDateString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Analytics Tab */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold text-gray-900">Company Analytics</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <CurrencyDollarIcon className="h-8 w-8 text-green-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Budget</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    ₹{analytics?.total_budget ? analytics.total_budget.toLocaleString('en-IN') : '0'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <ChartBarIcon className="h-8 w-8 text-blue-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Spent</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    ₹{analytics?.total_spent ? analytics.total_spent.toLocaleString('en-IN') : '0'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <UserGroupIcon className="h-8 w-8 text-purple-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Active Vendors</p>
+                  <p className="text-2xl font-semibold text-gray-900">{analytics?.active_vendors || 0}</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <div className="flex items-center">
+                <DocumentTextIcon className="h-8 w-8 text-orange-600" />
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-gray-500">Total Invoices</p>
+                  <p className="text-2xl font-semibold text-gray-900">{analytics?.total_invoices || 0}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">Budget Utilization</h4>
+              <div className="space-y-4">
+                {pods.slice(0, 5).map((pod) => {
+                  const utilization = getBudgetUtilization(pod);
+                  return (
+                    <div key={pod.pod_id}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-gray-600">{pod.pod_name}</span>
+                        <span className="text-sm font-medium text-gray-900">{utilization.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            utilization >= 90 ? 'bg-red-600' :
+                            utilization >= 75 ? 'bg-yellow-600' : 'bg-green-600'
+                          }`}
+                          style={{ width: `${utilization}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                {pods.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No pods to display</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <h4 className="text-md font-semibold text-gray-900 mb-4">Top Vendors by Spend</h4>
+              <div className="space-y-4">
+                {vendors.slice(0, 5).map((vendor) => (
+                  <div key={vendor.vendor_id} className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{vendor.vendor_name}</p>
+                      <p className="text-xs text-gray-500">{vendor.total_invoices || 0} invoices</p>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      ₹{vendor.total_spend ? vendor.total_spend.toLocaleString('en-IN') : '0'}
+                    </p>
+                  </div>
+                ))}
+                {vendors.length === 0 && (
+                  <p className="text-gray-500 text-center py-4">No vendors to display</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Tab */}
+      {activeTab === 'notes' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">Company Notes</h3>
+            <button
+              onClick={() => setShowNoteModal(true)}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Add Note
+            </button>
+          </div>
+
+          {notes.length === 0 ? (
+            <div className="text-center py-12">
+              <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No notes yet</h3>
+              <p className="text-gray-500 mb-4">Add your first note to get started</p>
+              <button
+                onClick={() => setShowNoteModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Add Note
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {notes.map((note) => (
+                <div key={note.note_id} className="bg-white rounded-lg shadow border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-900">{note.note_title}</h4>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(note.created_at).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEditNote(note)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteNote(note.note_id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      note.note_type === 'Important' ? 'bg-red-50 text-red-700' :
+                      note.note_type === 'Meeting' ? 'bg-blue-50 text-blue-700' :
+                      note.note_type === 'Financial' ? 'bg-green-50 text-green-700' :
+                      'bg-gray-50 text-gray-700'
+                    }`}>
+                      {note.note_type}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 line-clamp-3">{note.note_content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Edit Company Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">Edit Company</h2>
+            <form onSubmit={handleEditSubmit}>
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Company Name *
+                    Company Name
                   </label>
                   <input
                     type="text"
                     required
-                    value={editFormData.company_name}
-                    onChange={(e) => setEditFormData({...editFormData, company_name: e.target.value})}
+                    value={editForm.company_name}
+                    onChange={(e) => setEditForm({...editForm, company_name: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Total Budget (₹) *
+                    Total Budget (₹)
                   </label>
                   <input
                     type="number"
                     required
-                    value={editFormData.total_budget}
-                    onChange={(e) => setEditFormData({...editFormData, total_budget: e.target.value})}
+                    value={editForm.total_budget}
+                    onChange={(e) => setEditForm({...editForm, total_budget: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Financial Period *
+                    Currency
                   </label>
                   <select
-                    value={editFormData.financial_period}
-                    onChange={(e) => setEditFormData({...editFormData, financial_period: e.target.value})}
+                    value={editForm.currency}
+                    onChange={(e) => setEditForm({...editForm, currency: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="INR">INR</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Financial Period
+                  </label>
+                  <select
+                    value={editForm.financial_period}
+                    onChange={(e) => setEditForm({...editForm, financial_period: e.target.value})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Monthly">Monthly</option>
@@ -365,46 +744,31 @@ const CompanyDetail = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
+                    Description
                   </label>
-                  <select
-                    value={editFormData.status}
-                    onChange={(e) => setEditFormData({...editFormData, status: e.target.value})}
+                  <textarea
+                    value={editForm.description}
+                    onChange={(e) => setEditForm({...editForm, description: e.target.value})}
+                    rows="3"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                  />
                 </div>
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={editFormData.description}
-                  onChange={(e) => setEditFormData({...editFormData, description: e.target.value})}
-                  rows="3"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Optional description of the company..."
-                />
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={editFormData.notes}
-                  onChange={(e) => setEditFormData({...editFormData, notes: e.target.value})}
-                  rows="2"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Additional notes about the company..."
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm({...editForm, notes: e.target.value})}
+                    rows="3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
               <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => setIsEditing(false)}
+                  onClick={handleEditModalClose}
                   className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -413,530 +777,77 @@ const CompanyDetail = () => {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Save Changes
+                  Update
                 </button>
               </div>
             </form>
           </div>
-        )}
-
-        {/* Key Metrics - Real-time Dashboard Cards with Progress Bars */}
-        {dashboard && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center mb-4">
-                <UserGroupIcon className="h-8 w-8 text-blue-600" />
-                <div className="ml-4 flex-1">
-                  <p className="text-sm font-medium text-gray-600">Total Pods</p>
-                  <p className="text-2xl font-bold text-gray-900">{realTimeSummary.total_pods || 0}</p>
-                </div>
-              </div>
-              {/* Active Pods Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Active Pods</span>
-                  <span className="font-medium text-gray-700">
-                    {realTimeSummary.active_pods || 0} / {realTimeSummary.total_pods || 0}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${(realTimeSummary.total_pods || 0) > 0 ? ((realTimeSummary.active_pods || 0) / (realTimeSummary.total_pods || 0)) * 100 : 0}%`
-                    }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {((realTimeSummary.total_pods || 0) > 0 ? ((realTimeSummary.active_pods || 0) / (realTimeSummary.total_pods || 0)) * 100 : 0).toFixed(0)}% active
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center mb-4">
-                <CurrencyDollarIcon className="h-8 w-8 text-green-600" />
-                <div className="ml-4 flex-1">
-                  <p className="text-sm font-medium text-gray-600">Total Budget</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(company.total_budget)}
-                  </p>
-                </div>
-              </div>
-              {/* Budget Allocation Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Allocated to Pods</span>
-                  <span className="font-medium text-gray-700">
-                    {formatCurrency(realTimeSummary.allocated_budget || 0)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${company.total_budget > 0 ? Math.min(((realTimeSummary.allocated_budget || 0) / company.total_budget) * 100, 100) : 0}%`
-                    }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {company.total_budget > 0 ? Math.min(((realTimeSummary.allocated_budget || 0) / company.total_budget * 100), 100).toFixed(1) : 0}% allocated
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center mb-4">
-                <DocumentTextIcon className="h-8 w-8 text-purple-600" />
-                <div className="ml-4 flex-1">
-                  <p className="text-sm font-medium text-gray-600">Total Invoices</p>
-                  <p className="text-2xl font-bold text-gray-900">{realTimeSummary.total_invoices || 0}</p>
-                </div>
-              </div>
-              {/* Invoice Status Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Paid Invoices</span>
-                  <span className="font-medium text-gray-700">
-                    {realTimeSummary.paid_invoices || 0} / {realTimeSummary.total_invoices || 0}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${(realTimeSummary.total_invoices || 0) > 0 ? ((realTimeSummary.paid_invoices || 0) / (realTimeSummary.total_invoices || 0)) * 100 : 0}%`
-                    }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {((realTimeSummary.total_invoices || 0) > 0 ? ((realTimeSummary.paid_invoices || 0) / (realTimeSummary.total_invoices || 0)) * 100 : 0).toFixed(0)}% paid
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-              <div className="flex items-center mb-4">
-                <ArrowTrendingUpIcon className="h-8 w-8 text-orange-600" />
-                <div className="ml-4 flex-1">
-                  <p className="text-sm font-medium text-gray-600">Total Spend</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {formatCurrency(realTimeSummary.used_budget || 0)}
-                  </p>
-                </div>
-              </div>
-              {/* Budget Used Progress Bar - MAIN FEATURE */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-gray-500">Budget Used</span>
-                  <span className="font-medium text-gray-700">
-                    {formatCurrency(realTimeSummary.used_budget || 0)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      (realTimeSummary.budget_utilization_percentage || 0) > 90
-                        ? 'bg-red-600'
-                        : (realTimeSummary.budget_utilization_percentage || 0) > 70
-                        ? 'bg-yellow-600'
-                        : 'bg-orange-600'
-                    }`}
-                    style={{
-                      width: `${Math.min(realTimeSummary.budget_utilization_percentage || 0, 100)}%`
-                    }}
-                  ></div>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {realTimeSummary.budget_utilization_percentage || 0}% of budget used
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        
-        {/* Company Information */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Company Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm text-gray-500">Description</p>
-              <p className="text-gray-900">{company.description || 'No description provided'}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Financial Period</p>
-              <p className="text-gray-900">{company.financial_period}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Created Date</p>
-              <p className="text-gray-900">{formatDate(company.created_at)}</p>
-            </div>
-          </div>
         </div>
+      )}
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Pod Breakdown - Pie Chart Style */}
-          {dashboard?.podBreakdown && dashboard.podBreakdown.length > 0 && (
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <ChartPieIcon className="h-5 w-5 mr-2 text-blue-600" />
-                Pod-wise Spending Distribution
-              </h3>
-              <div className="space-y-3">
-                {dashboard.podBreakdown.map((pod, index) => {
-                  const colors = ['bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 'bg-purple-500'];
-                  const color = colors[index % colors.length];
-                  const percentage = dashboard.podBreakdown.reduce((sum, p) => sum + (p.total_spend || 0), 0) > 0
-                    ? ((pod.total_spend || 0) / dashboard.podBreakdown.reduce((sum, p) => sum + (p.total_spend || 0), 0)) * 100
-                    : 0;
-
-                  return (
-                    <div key={pod.pod_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center flex-1">
-                        <div className={`w-4 h-4 rounded-full ${color} mr-3`}></div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-700">{pod.pod_name}</span>
-                            <span className="text-sm text-gray-900 font-semibold">{formatCurrency(pod.total_spend)}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>{pod.invoice_count || 0} invoices</span>
-                            <span>{percentage.toFixed(1)}% of total spend</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Category Breakdown - Pie Chart Style */}
-          {dashboard?.categoryBreakdown && dashboard.categoryBreakdown.length > 0 && (
-            <div className="bg-white p-6 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <ChartPieIcon className="h-5 w-5 mr-2 text-green-600" />
-                Category-wise Spending Distribution
-              </h3>
-              <div className="space-y-3">
-                {dashboard.categoryBreakdown.map((category, index) => {
-                  const colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500'];
-                  const color = colors[index % colors.length];
-                  const totalCategorySpend = dashboard.categoryBreakdown.reduce((sum, c) => sum + (c.total_spend || 0), 0);
-                  const percentage = totalCategorySpend > 0 ? ((category.total_spend || 0) / totalCategorySpend) * 100 : 0;
-
-                  return (
-                    <div key={category.vendor_type} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center flex-1">
-                        <div className={`w-4 h-4 rounded-full ${color} mr-3`}></div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm font-medium text-gray-700">{category.vendor_type}</span>
-                            <span className="text-sm text-gray-900 font-semibold">{formatCurrency(category.total_spend)}</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>{category.invoice_count || 0} invoices</span>
-                            <span>{percentage.toFixed(1)}% of total spend</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Recent Invoices Table */}
-        {dashboard?.recentInvoices && dashboard.recentInvoices.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Invoices</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Title</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pod</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {dashboard.recentInvoices.map((invoice) => (
-                    <tr key={invoice.invoice_id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.invoice_title}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.vendor_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{invoice.pod_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(invoice.amount)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          invoice.status === 'Paid' ? 'bg-green-100 text-green-800' :
-                          invoice.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {invoice.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(invoice.due_date)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Monthly Spending Trend */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <ArrowTrendingUpIcon className="h-5 w-5 mr-2 text-purple-600" />
-            Monthly Spending Trend
-          </h3>
-          <div className="h-80">
-            {dashboard?.monthlyTrend && dashboard.monthlyTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={prepareMonthlyTrendData(dashboard.monthlyTrend)}
-                  margin={{
-                    top: 5,
-                    right: 30,
-                    left: 20,
-                    bottom: 5,
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12 }}
-                    angle={-45}
-                    textAnchor="end"
-                    height={60}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip
-                    formatter={(value) => [formatCurrency(value), '']}
-                    contentStyle={{
-                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="totalAmount"
-                    stroke="#8b5cf6"
-                    strokeWidth={2}
-                    dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6 }}
-                    name="Total Invoiced"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="paidAmount"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6 }}
-                    name="Paid Amount"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
-                <div className="text-center">
-                  <ArrowTrendingUpIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-                  <p className="text-gray-500 text-sm">No monthly spending data available</p>
-                  <p className="text-gray-400 text-xs mt-1">Invoices will appear here once added</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Fixed Right Sidebar - Notes */}
-      <div className={`fixed right-0 top-0 bg-white border-l border-gray-200 z-20 transition-all duration-300 ease-in-out ${
-        isNotesCollapsed ? 'w-16' : 'w-96'
-      }`}>
-        <div className={`p-6 overflow-y-auto h-full pb-20 ${isNotesCollapsed ? 'px-2' : ''}`}>
-          {/* Collapsible Header */}
-          <div className="mb-4">
-            <button
-              onClick={() => setIsNotesCollapsed(!isNotesCollapsed)}
-              className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors group"
-              title={isNotesCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
-            >
-              <div className="flex items-center space-x-2">
-                <ChatBubbleLeftRightIcon className={`h-5 w-5 text-gray-600 group-hover:text-gray-800 transition-colors ${isNotesCollapsed ? 'h-6 w-6' : ''}`} />
-                {!isNotesCollapsed && (
-                  <h3 className="text-lg font-semibold text-gray-900">Company Notes</h3>
-                )}
-              </div>
-              <div className="flex items-center space-x-1">
-                {!isNotesCollapsed && (
-                  <>
-                    <label className="flex items-center cursor-pointer mr-2" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={showDeletedNotes}
-                        onChange={(e) => setShowDeletedNotes(e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div className="relative">
-                        <div className={`block w-10 h-6 rounded-full ${showDeletedNotes ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
-                        <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition transform ${showDeletedNotes ? 'translate-x-4' : ''}`}></div>
-                      </div>
-                      <span className="ml-2 text-sm text-gray-700">Show deleted</span>
-                    </label>
-                    <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                      {notes.filter(note => showDeletedNotes || !note.deleted_at).length}
-                    </div>
-                  </>
-                )}
-                {isNotesCollapsed ? (
-                  <ChevronLeftIcon className="h-4 w-4 text-gray-600 group-hover:text-gray-800 transition-colors" />
-                ) : (
-                  <ChevronRightIcon className="h-4 w-4 text-gray-600 group-hover:text-gray-800 transition-colors" />
-                )}
-              </div>
-            </button>
-          </div>
-
-          {/* Collapsible Content */}
-          <div className={`transition-all duration-300 ease-in-out ${
-            isNotesCollapsed ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100 h-auto'
-          }`}>
-            <div className="mb-6">
-              <button
-                onClick={() => setShowNoteModal(true)}
-                className="w-full flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add Note
-              </button>
-            </div>
-
-            <div className="space-y-4">
-          {notes.filter(note => showDeletedNotes || !note.deleted_at).length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              {showDeletedNotes ? 'No deleted notes found.' : 'No notes yet. Click "Add Note" to create the first note.'}
-            </div>
-          ) : (
-            notes.filter(note => showDeletedNotes || !note.deleted_at).map((note) => {
-              const isDeleted = note.deleted_at !== null && note.deleted_at !== undefined;
-              console.log(`Note ${note.note_id}: deleted_at=${note.deleted_at}, isDeleted=${isDeleted}`);
-              return (
-                <div
-                  key={note.note_id}
-                  className={`border rounded-lg p-4 ${
-                    isDeleted
-                      ? 'border-red-300 bg-red-50 opacity-80 shadow-sm'
-                      : 'border-gray-200 bg-white shadow-sm hover:shadow-md'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm mb-2 break-words overflow-wrap-anywhere whitespace-pre-wrap ${
-                        isDeleted ? 'text-gray-600' : 'text-gray-900'
-                      }`}>
-                        {note.note_text}
-                      </p>
-                      <div className="flex flex-wrap items-center text-xs text-gray-500 gap-x-2 gap-y-1">
-                        <span>By {note.created_by_name}</span>
-                        <span>•</span>
-                        <span>{formatDate(note.created_at)}</span>
-                        {note.updated_at !== note.created_at && !isDeleted && (
-                          <>
-                            <span>•</span>
-                            <span>Updated</span>
-                          </>
-                        )}
-                        {isDeleted && (
-                          <>
-                            <span className="text-red-600 font-medium">•</span>
-                            <span className="text-red-600 font-medium">
-                              Deleted by {note.deleted_by_name || 'Unknown user'}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {!isDeleted && (
-                      <div className="flex space-x-1 ml-2 flex-shrink-0">
-                        <button
-                          onClick={() => handleEditNote(note)}
-                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                          title="Edit note"
-                        >
-                          <PencilIcon className="h-3 w-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteNote(note.note_id)}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                          title="Delete note"
-                        >
-                          <TrashIcon className="h-3 w-3" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Add/Edit Note Modal */}
-        {showNoteModal && (
+      {/* Add/Edit Note Modal */}
+      {showNoteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">
+            <h2 className="text-xl font-bold mb-4">
               {editingNote ? 'Edit Note' : 'Add Note'}
-            </h3>
-            <form onSubmit={handleAddNote}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Note
-                </label>
-                <textarea
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter your note here..."
-                  required
-                />
+            </h2>
+            <form onSubmit={handleNoteSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Note Title
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={noteForm.note_title}
+                    onChange={(e) => setNoteForm({...noteForm, note_title: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Note Type
+                  </label>
+                  <select
+                    value={noteForm.note_type}
+                    onChange={(e) => setNoteForm({...noteForm, note_type: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="General">General</option>
+                    <option value="Important">Important</option>
+                    <option value="Meeting">Meeting</option>
+                    <option value="Financial">Financial</option>
+                    <option value="Legal">Legal</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Note Content
+                  </label>
+                  <textarea
+                    required
+                    value={noteForm.note_content}
+                    onChange={(e) => setNoteForm({...noteForm, note_content: e.target.value})}
+                    rows="4"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
               </div>
-              <div className="flex justify-end space-x-3">
+              <div className="flex justify-end space-x-3 mt-6">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowNoteModal(false);
-                    setEditingNote(null);
-                    setNoteText('');
-                  }}
-                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  onClick={handleNoteModalClose}
+                  className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  {editingNote ? 'Update' : 'Add'}
+                  {editingNote ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>
