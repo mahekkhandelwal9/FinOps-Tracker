@@ -1,7 +1,8 @@
 {
-  "name": "finops-frontend",
+  "name": "finops-tracker",
   "version": "1.0.0",
   "private": true,
+  "homepage": "https://mahekkhandelwal9.github.io/FinOps-Tracker",
   "dependencies": {
     "@headlessui/react": "^1.7.15",
     "@heroicons/react": "^2.2.0",
