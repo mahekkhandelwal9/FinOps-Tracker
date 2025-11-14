@@ -16,6 +16,7 @@ import {
   ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import Logo from '../UI/Logo';
+import DemoBanner from '../UI/DemoBanner';
 
 const Layout = () => {
   const { user, logout } = useAuth();
@@ -62,6 +63,7 @@ const Layout = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <DemoBanner />
       {/* Mobile sidebar */}
       <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? '' : 'pointer-events-none'}`}>
         <div className={`absolute inset-0 bg-gray-600 transition-opacity ${sidebarOpen ? 'opacity-75' : 'opacity-0'}`} onClick={() => setSidebarOpen(false)} />
