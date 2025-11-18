@@ -169,6 +169,10 @@ export const mockUser = {
   email: 'demo@finops.com',
   first_name: 'Demo',
   last_name: 'User',
+  name: 'Demo User',
+  phone: '+91-9876543210',
+  department: 'Finance',
+  location: 'Kolkata, India',
   role: 'admin',
   created_at: '2024-01-01',
   updated_at: '2024-11-14'

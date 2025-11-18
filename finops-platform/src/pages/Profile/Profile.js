@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { UserCircleIcon, BuildingOfficeIcon, ShieldCheckIcon, KeyIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import { UserCircleIcon, BuildingOfficeIcon, ShieldCheckIcon, KeyIcon, ArrowRightOnRectangleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { authAPI } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Profile = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -14,33 +14,46 @@ const Profile = () => {
   });
   const [editMode, setEditMode] = useState(false);
   const [profileData, setProfileData] = useState({
-    name: '',
-    email: ''
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    department: '',
+    location: ''
   });
 
   useEffect(() => {
     if (user) {
       setProfileData({
-        name: user.name || '',
-        email: user.email || ''
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        department: user.department || 'Finance',
+        location: user.location || 'Kolkata, India'
       });
     }
   }, [user]);
-
-  const { updateProfile } = useAuth();
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await updateProfile(profileData);
+      // Combine first and last name for backward compatibility
+      const updateData = {
+        ...profileData,
+        name: `${profileData.first_name} ${profileData.last_name}`.trim()
+      };
+
+      const response = await authAPI.updateProfile(updateData);
+      updateUser(response.data.user);
       alert('Profile updated successfully!');
+      setEditMode(false);
     } catch (error) {
       console.error('Error updating profile:', error);
       alert('Error updating profile: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
-      setEditMode(false);
     }
   };
 
@@ -59,9 +72,10 @@ const Profile = () => {
 
     setLoading(true);
     try {
-      await api.put('/auth/change-password', {
+      await authAPI.changePassword({
         currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword
+        newPassword: passwordData.newPassword,
+        confirmPassword: passwordData.confirmPassword
       });
       alert('Password changed successfully');
       setShowPasswordModal(false);
@@ -72,15 +86,15 @@ const Profile = () => {
       });
     } catch (error) {
       console.error('Error changing password:', error);
-      alert('Error changing password. Please check your current password.');
+      alert('Error changing password: ' + (error.response?.data?.error || error.message));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="px-8 py-8 sm:px-6 md:px-8 lg:px-12">
+      <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Profile</h1>
           <p className="text-gray-600">Manage your account settings and preferences</p>
@@ -95,7 +109,7 @@ const Profile = () => {
                   <UserCircleIcon className="h-12 w-12 text-primary-600" />
                 </div>
                 <h2 className="mt-4 text-xl font-semibold text-gray-900">
-                  {user?.name || 'User'}
+                  {user?.name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'}
                 </h2>
                 <p className="text-sm text-gray-500">{user?.role}</p>
                 <p className="text-sm text-gray-500">{user?.email}</p>
@@ -147,15 +161,26 @@ const Profile = () => {
 
               {editMode ? (
                 <form onSubmit={handleUpdateProfile}>
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Full Name
+                        First Name
                       </label>
                       <input
                         type="text"
-                        value={profileData.name}
-                        onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                        value={profileData.first_name}
+                        onChange={(e) => setProfileData({...profileData, first_name: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profileData.last_name}
+                        onChange={(e) => setProfileData({...profileData, last_name: e.target.value})}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -170,26 +195,83 @@ const Profile = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        {loading ? 'Saving...' : 'Save Changes'}
-                      </button>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={profileData.phone}
+                        onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Department
+                      </label>
+                      <select
+                        value={profileData.department}
+                        onChange={(e) => setProfileData({...profileData, department: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="Finance">Finance</option>
+                        <option value="Operations">Operations</option>
+                        <option value="IT">IT</option>
+                        <option value="Procurement">Procurement</option>
+                        <option value="Management">Management</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Location
+                      </label>
+                      <input
+                        type="text"
+                        value={profileData.location}
+                        onChange={(e) => setProfileData({...profileData, location: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setEditMode(false)}
+                      className="mr-3 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {loading ? 'Saving...' : 'Save Changes'}
+                    </button>
                   </div>
                 </form>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm font-medium text-gray-500">Full Name</p>
-                    <p className="text-gray-900">{user?.name || 'N/A'}</p>
+                    <p className="text-gray-900">{user?.name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Email Address</p>
                     <p className="text-gray-900">{user?.email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Phone Number</p>
+                    <p className="text-gray-900">{user?.phone || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Department</p>
+                    <p className="text-gray-900">{user?.department || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Location</p>
+                    <p className="text-gray-900">{user?.location || 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-500">Role</p>
@@ -199,6 +281,12 @@ const Profile = () => {
                     <p className="text-sm font-medium text-gray-500">Member Since</p>
                     <p className="text-gray-900">
                       {user?.created_at ? new Date(user.created_at).toLocaleDateString('en-IN') : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-500">Last Updated</p>
+                    <p className="text-gray-900">
+                      {user?.updated_at ? new Date(user.updated_at).toLocaleDateString('en-IN') : 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -268,8 +356,23 @@ const Profile = () => {
       {/* Change Password Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">Change Password</h2>
+          <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Change Password</h2>
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: ''
+                  });
+                }}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <XMarkIcon className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
             <form onSubmit={handleChangePassword}>
               <div className="space-y-4">
                 <div>

@@ -33,6 +33,30 @@ export const mockApi = {
       await delay();
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       return { data: { user } };
+    },
+
+    updateProfile: async (userData) => {
+      await delay();
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUser = { ...currentUser, ...userData, updated_at: new Date().toISOString() };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      return { data: { user: updatedUser } };
+    },
+
+    changePassword: async (passwordData) => {
+      await delay();
+      // Simulate password validation
+      if (!passwordData.currentPassword || !passwordData.newPassword) {
+        throw new Error('Current password and new password are required');
+      }
+      if (passwordData.newPassword.length < 6) {
+        throw new Error('New password must be at least 6 characters');
+      }
+      // Simulate current password check
+      if (passwordData.currentPassword !== 'demo123') {
+        throw new Error('Current password is incorrect');
+      }
+      return { data: { message: 'Password changed successfully' } };
     }
   },
 

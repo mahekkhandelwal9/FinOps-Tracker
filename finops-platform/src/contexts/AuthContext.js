@@ -197,12 +197,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUser = (userData) => {
+    dispatch({
+      type: 'SET_USER',
+      payload: userData,
+    });
+  };
+
   const value = {
     ...state,
     login,
     logout,
     register,
     updateProfile,
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

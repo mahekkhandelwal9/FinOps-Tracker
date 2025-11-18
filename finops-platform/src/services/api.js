@@ -2,7 +2,7 @@ import axios from 'axios';
 import { mockApi } from './mockApi';
 
 // Use mock API for Vercel deployment, real API for local development
-const USE_MOCK_API = process.env.NODE_ENV === 'production' || window.location.hostname !== 'localhost';
+const USE_MOCK_API = true; // Force mock API due to backend issues
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance with default config
@@ -47,8 +47,8 @@ export const authAPI = {
   login: USE_MOCK_API ? mockApi.auth.login : (credentials) => api.post('/auth/login', credentials),
   register: USE_MOCK_API ? mockApi.auth.register : (userData) => api.post('/auth/register', userData),
   getProfile: USE_MOCK_API ? mockApi.auth.getProfile : () => api.get('/auth/profile'),
-  updateProfile: USE_MOCK_API ? () => Promise.reject(new Error('Update disabled in demo mode')) : (userData) => api.put('/auth/profile', userData),
-  changePassword: USE_MOCK_API ? () => Promise.reject(new Error('Update disabled in demo mode')) : (passwordData) => api.put('/auth/change-password', passwordData),
+  updateProfile: USE_MOCK_API ? mockApi.auth.updateProfile : (userData) => api.put('/auth/profile', userData),
+  changePassword: USE_MOCK_API ? mockApi.auth.changePassword : (passwordData) => api.put('/auth/change-password', passwordData),
 };
 
 // Company APIs
